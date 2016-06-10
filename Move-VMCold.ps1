@@ -4,11 +4,11 @@ function Move-VMCold {
 
 param (
     [parameter(position=0,ValueFromPipeline=$True,ValueFromPipelineByPropertyname=$True,Mandatory=$True)]
-    [VMware.VimAutomation.ViCore.Impl.V1.Inventory.VirtualMachineImpl[]]
+    [VMware.VimAutomation.ViCore.types.V1.Inventory.VirtualMachine[]]
     $VM,
 
     [Parameter(Mandatory=$true)]
-    [VMware.VimAutomation.ViCore.Impl.V1.Inventory.VMHostImpl]
+    [VMware.VimAutomation.ViCore.Types.V1.Inventory.VMHost]
     $Destination,
 
     [validateset("true","false")]
