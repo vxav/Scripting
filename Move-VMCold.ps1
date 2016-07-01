@@ -16,13 +16,28 @@ param (
     $PowerON="true"
 )
 
+Begin {
+
+    $HostVlan = ($Destination | get-virtualportgroup).name
+    $hostDS   = ($Destination | get-datastore).name
+
+}
+
 Process {
 
     $VM | ForEach-Object {
         
         $currentVM = $_
 
-         IF ($PSCmdlet.ShouldProcess($currentVM.name,"Shut down and Move to $($Destination.name)")) {
+
+        $VMVlan   = ($currentVM | get-virtualportgroup).name
+        $VMDS     = ($currentVM | get-datastore).name
+        $Problems = @()
+        $VMVlan | ForEach-Object { IF ($HostVlan -notcontains $_) {$Problems += $_} }
+        $VMDS   | ForEach-Object { IF ($hostDS -notcontains $_)   {$Problems += $_} }
+
+
+         IF ($PSCmdlet.ShouldProcess($currentVM.name,"Shut down and Move to $($Destination.name)") -and !$Problems) {
 
             TRY {
             
@@ -56,9 +71,11 @@ Process {
 
             CATCH {Write-Error $_.Exception -ErrorAction Continue}
 
-        }#IF PScmdlet
+        } ELSEIF ($Problems) {Write-error "The following objects were not found on destination: $Problems"} #IF PScmdlet and $Problems
 
-    }#foreach
+        Clear-Variable VMVlan,VMDS,Problems
+
+    }#foreach VM
 
 }#process
 
