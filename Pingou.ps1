@@ -111,13 +111,13 @@ Pingou doesn't support the specification of a source ip yet.
 Remote IP or hostname to test.
 
 .PARAMETER COUNT
-(-t) Number of test issued.
+(-n) Number of test issued.
 
 .PARAMETER PORT
 TCP port to check on the remote host, validate range is 1 to 65535.
 
 .PARAMETER CONTINUOUS
-(-n) Number of tests infinite. can be stopped with ctrl+c or by closing the invite.
+(-t) Number of tests infinite. can be stopped with ctrl+c or by closing the invite.
 
 .PARAMETER TIMEOUT
 (-w) Number of milliseconds after which a timeout is issued for each test.
@@ -142,7 +142,16 @@ RemoteEndpoint Bytes Time TTL
 8.8.8.8           32   54  59
 
 .EXAMPLE
- > Pingou 8.8.8.8 53
+> pingou 8.8.8.8 -n 3 -l 255
+
+RemoteEndpoint Bytes Time TTL
+-------------- ----- ---- ---
+8.8.8.8          255   16  59
+8.8.8.8          255   29  59
+8.8.8.8          255   19  59
+
+.EXAMPLE
+ > Pingou -destination 8.8.8.8 -port 53
 
 LocalEndpoint      RemoteEndpoint Status Timems
 -------------      -------------- ------ ------
@@ -150,6 +159,15 @@ LocalEndpoint      RemoteEndpoint Status Timems
 192.168.0.12:49784 8.8.8.8:53       True     16
 192.168.0.12:49785 8.8.8.8:53       True     16
 192.168.0.12:49786 8.8.8.8:53       True     16
+
+.EXAMPLE
+> pingou www.google.fr 80 -Timeout 10 -Count 2 -Delayms 200
+
+LocalEndpoint RemoteEndpoint   Status Timems
+------------- --------------   ------ ------
+0.0.0.0:51376 62.252.232.55:80  False     10
+0.0.0.0:51377 62.252.232.55:80  False     10
+
 
 #>
 
