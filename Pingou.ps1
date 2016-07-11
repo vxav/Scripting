@@ -197,7 +197,7 @@ param(
     [int]
     $Timeout = 1000,
 
-    [ValidateRange(200,10000)]
+    [ValidateRange(50,10000)]
     [int]
     $Delayms = 750,
 
