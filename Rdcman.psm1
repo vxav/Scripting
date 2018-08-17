@@ -1,4 +1,21 @@
-﻿Function Add-RDCManVM {
+<#
+
+xavier.avrillier@gmail.com
+
+Create an "RDCMan ready" RDG file with all the running Windows VMs connected in PowerCLI.
+
+- Only Windows OS is supported.
+- The VM must have the VMware tools installed.
+- RDCMan must be closed.
+
+[ Update 201808/17 ]
+
+- Added 3389 TCP port check on VM IP(s) - Set the first one the responds as hostname and "NO-RDP-RESPONSE" if none does.
+- Added TCPCheckTimeout parameter to Add-RDCManVM function to configure the time it takes for the TCP port check to time out.
+
+#>
+
+Function Add-RDCManVM {
 
 param(
     [System.IO.FileInfo]
@@ -8,8 +25,9 @@ param(
     [VMware.VimAutomation.ViCore.types.V1.Inventory.VirtualMachine[]]
     $VM,
 
-    [string]
-    $Group
+    [int]
+    $TCPCheckTimeout = 300
+
 )
 
 # RDCMan must be closed otherwise the changes won't persist
@@ -19,8 +37,6 @@ if (get-process RDCMan -ErrorAction SilentlyContinue) {Write-Warning "Close RDCM
 $rdgfile    = Get-ChildItem $RdgFilePath
 $RdgContent = $rdgfile | Get-Content
 
-# Check if group exists
-if (!($RdgContent -match "<name>$Group</name>")) {Write-Warning "No $Group group found in specified rdg file"; break}
 
 # Process VMs
 
@@ -29,13 +45,42 @@ $VM = $VM | where {$_.powerstate -eq "poweredon" -and $_.guest.OSFullName -match
 foreach ($V in $VM) {
 
     if ($v.guest.OSFullName -match "windows" -and !($RdgContent -match "<displayName>$($v.guest.HostName)</displayName>") -and !($RdgContent -match "<name>$IP</name>")) {
-        
-        $i++
 
-        Write-Progress -Activity "Group $Group : VM #$i/$($VM.count)" -Status $V.name -PercentComplete ($i/$VM.count*100)
+        $Prog++
+
+        if (!$v.guest.ExtensionData.IpStack.dnsconfig.domainname) {$group = "No-Domain"}
+        else {$group = $v.guest.ExtensionData.IpStack.dnsconfig.domainname}
+        $group = $group.ToLower()
+
+        # Check if group exists
+        if (!($RdgContent -match "<name>$Group</name>")) {Write-Warning "Group $Group found in specified rdg file; $($V.name) skipped"; break}
+
+
+        Write-Progress -Activity "Group $Group : VM #$Prog/$($VM.count)" -Status $V.name -PercentComplete ($Prog/$VM.count*100) -Id 1
 
         $IP = $v.guest.IPAddress | where {$_ -like "*.*.*.*"}
-        if ($ip.count -gt 1){$connectName = $ip[0]}else{$connectName = $ip}
+
+        while (!$3389 -and $i -lt $ip.count) {
+            foreach ($IPP in $IP) {
+                $PortPing = New-Object System.Net.Sockets.TCPClient
+                
+                # Try TCP port and stop after the $TCPCheckTimeout timeout
+                $ExecFrame = (get-date).AddMilliseconds($TCPCheckTimeout)
+                
+                $PortConnect = $PortPing.BeginConnect("$IPP",3389,$null,$null)
+
+                While (((get-date) -lt $ExecFrame) -and ($PortPing.Connected -ne "true")) {}
+                
+                # Populate $3389 and break from loop if tcp open
+                if ($PortPing.Connected) {$3389 = $IPP; break}
+                $PortPing.Close()
+
+                $i++
+            }
+        }
+
+        if (!$3389) {$3389 = "NO-RDP-RESPONSE"}
+
         $VMNotes = @()
         $VMNotes += $v.Notes
         $v.CustomFields | where value | ForEach-Object {$VMNotes += "$($_.key) = $($_.value)"}
@@ -46,7 +91,7 @@ foreach ($V in $VM) {
       <server>
         <properties>
           <displayName>$($v.guest.HostName)</displayName>
-          <name>$($connectName)</name>
+          <name>$($3389)</name>
           <comment>$($v.guest.HostName)
 VM     : $($v.name)
 Cluster: $($v | get-cluster | select -ExpandProperty name)
@@ -59,10 +104,13 @@ $($VMNotes -replace "@",' at ' -replace "<","" -replace ">","" -replace "&"," an
       </server>
 "@
     
+    Clear-Variable i,3389 -ErrorAction SilentlyContinue
     
-    } else {"$($v.name): non windows host or already in rdg file"}
+    } else {Write-warning "$($v.name): non windows host or already in rdg file"}
 
 }
+
+if (!$AddContent) {break}
 
 # Find the index of the record </properties> following the group name
 $StringIndexToReplace = ($RdgContent | where {$_ -match "<name>$Group</name>"}).readcount
@@ -141,18 +189,18 @@ ForEach ($VMDomain in $Domains) {
     
     $a++
 
-    Write-Progress -Activity "Domain $VMDomain : Domain #$a/$($Domains.count)" -Status $VMDomain -PercentComplete ($a/$Domains.count*100)
+    Write-Progress -Activity "Domain #$a/$($Domains.count)" -Status $VMDomain -PercentComplete ($a/$Domains.count*100)
 
     $V = $VM | where {$_.guest.ExtensionData.IpStack.dnsconfig.domainname -eq $VMDomain}
 
-    Add-RDCManVM -RdgFilePath $RdgFilePath -VM $V -Group $VMDomain
+    Add-RDCManVM -RdgFilePath $RdgFilePath -VM $V
 
 }
 
-Write-Progress -Activity "Domain No-Domain : Domain #$a/$($Domains.count)" -Status "No-Domain" -PercentComplete ($a++/$Domains.count*100)
+Write-Progress -Activity "Domain No-Domain : Domain #$a/$($Domains.count)" -Status "No-Domain" -PercentComplete ($a++/$Domains.count*100) -Id 0
 
 $VMNoDomain = $VM | where {!($_.guest.ExtensionData.IpStack.dnsconfig.domainname)}
-Add-RDCManVM -RdgFilePath $RdgFilePath -VM $VMNoDomain -Group "No-Domain"
+Add-RDCManVM -RdgFilePath $RdgFilePath -VM $VMNoDomain
 
 "-End-"
 }
