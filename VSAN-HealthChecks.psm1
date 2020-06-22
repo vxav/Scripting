@@ -64,7 +64,7 @@ param(
 
     [parameter(Mandatory=$True)]
     [string[]]
-    $TestId,
+    $HealthCheckId,
 
     [parameter(Mandatory=$True)]
     [validateset("Silence","Unsilence")]
@@ -76,8 +76,8 @@ Process {
 
             switch ($CheckState) {
 
-    "Silence"   {$add = $TestId; $remove = $null}
-    "Unsilence" {$remove = $TestId; $add = $null}
+    "Silence"   {$add = $HealthCheckId; $remove = $null}
+    "Unsilence" {$remove = $HealthCheckId; $add = $null}
 
     }
 
