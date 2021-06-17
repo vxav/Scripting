@@ -1,0 +1,62 @@
+Function Get-VMFSDatastore {
+
+param(
+    [parameter(position=0,ValueFromPipeline=$True,ValueFromPipelineByPropertyname=$True)]
+    [VMware.VimAutomation.ViCore.Types.V1.DatastoreManagement.VmfsDatastore[]]
+    $Datastore = (Get-Datastore | where type -eq VMFS)
+
+)
+
+Process{
+
+    ForEach ($DS in $Datastore) {
+        
+        if ($ds.type -eq "VMFS") {
+
+            # Check if the datastore is expandable.
+
+            if ($ds.Accessible) {
+
+                $hostId = [string]($ds.ExtensionData.Host | where {$_.mountinfo.Accessible -and $_.mountinfo.Mounted} | select -ExpandProperty key -First 1)
+                $DsHostDsView = get-view $hostId -Property ConfigManager.DatastoreSystem
+                $DsHostDsView = get-view $DsHostDsView.ConfigManager.DatastoreSystem
+                        
+                $Expandable = $DsHostDsView.QueryVmfsDatastoreExpandOptions($ds.id)
+                if ($Expandable.count -eq 0) {$Expandable = $false}
+                else {
+                    $LunSize = ($Expandable.info.VmfsExtent.end.block - $Expandable.info.VmfsExtent.start.block) * $Expandable.info.VmfsExtent.start.blocksize / 1GB
+                    $FreeSpaceOnLun = [math]::round($LunSize - $ds.CapacityGB,2)
+                    $Expandable = "+$($FreeSpaceOnLun)GB"
+                }
+
+            } else {$Expandable = $false}
+
+            # Process capacity and provisioning data.
+
+            $CapacityGB    = [Math]::Round(($ds.extensiondata.summary.capacity   / 1GB),2)
+            $FreeGB        = [Math]::Round(($ds.extensiondata.summary.FreeSpace  / 1GB),2)
+            $UsedGB        = [Math]::Round((($ds.extensiondata.summary.capacity  / 1GB) - ($ds.extensiondata.summary.FreeSpace / 1GB)),2)
+            $ProvisionedGB = [Math]::Round((($ds.extensiondata.summary.capacity  / 1GB) - ($ds.extensiondata.summary.FreeSpace / 1GB) + ($ds.extensiondata.summary.Uncommitted / 1GB)),2)
+        
+            $ProvisionedPercent = [Math]::Round($ProvisionedGB / $CapacityGB * 100,1)
+
+            [pscustomobject]@{
+                Name          = $ds.name
+                Accessible    = $ds.Accessible
+                CapacityGB    = $CapacityGB
+                FreeSpaceGB   = $FreeGB
+                FreeSpace     = "$([math]::round($FreeGB / $CapacityGB * 100,1))%"
+                UsedSpaceGB   = $UsedGB
+                ProvisionedGB = $ProvisionedGB
+                Provisioned   = "$ProvisionedPercent%"
+                NbRunningVMs  = ($ds | Get-VM | where powerstate -eq Poweredon).count
+                Expandable    = $Expandable
+            }
+
+        } else {"$($Datastore.name) is not a VMFS datastore"}
+
+    }
+
+}
+
+}
